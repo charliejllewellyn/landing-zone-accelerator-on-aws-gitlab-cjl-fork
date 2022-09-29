@@ -16,6 +16,13 @@ Parameters:
     Default: 'true'
     Description: 'If set to true (default) this will remove the original installer stack you deployed to setup Landing Zone Accelerator on AWS. If set to false the stack will remain allowing you to re-run the AWSAccelerator-Installer to redeploy your landing zone configuration'
     Type: 'String'
+  DeleteConfigRepository:
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: 'If set to true (default) this will remove your Landing Zone Accelerator on AWS configuration repository. If set to false the repository will remain.'
+    Type: 'String'
 
 Resources:
   vpc:
@@ -70,10 +77,17 @@ Resources:
             yum install -y jq
             region=$(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
             export AWS_REGION=$region
+
             if [[ "${deleteInstaller}" == "true" ]]; then
               deleteFlag="--installer-delete"
             else
               deleteFlag=""
+            fi
+
+            if [[ "${deleteRepo}" == "true" ]]; then
+              repoFlag="--delete-config-repo"
+            else
+              repoFlag=""
             fi
             
             # Setup logging
@@ -123,10 +137,11 @@ Resources:
             cd landing-zone-accelerator-on-aws/source &>>$logFile
             yarn install &>>$logFile
             cd packages/@aws-accelerator/tools/ &>>$logFile
-            yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} $deleteFlag --partition aws --delete-data --ignore-termination-protection --delete-pipelines &>>$logFile
+            yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} --ignore-termination-protection true --full-destroy $deleteFlag $deleteRepo --partition aws --delete-data --ignore-termination-protection --delete-pipelines &>>$logFile
             /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource CleanupEC2 --region ${AWS::Region}
           - stackName: !Ref LandingZoneAcceleratorStack
             deleteInstaller: !Ref DeleteInstallerStack
+            deleteRepo: !Ref DeleteConfigRepository
 
 Outputs:
   CleanupLogs:
