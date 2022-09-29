@@ -23,6 +23,7 @@ The script expects two inputs:
 |:---------------|:---------------|:---------------|
 |LandingZoneAcceleratorStackName|The name you gave the Landing Zone Accelerator on AWS installation stack when you deployed the solution.|AWSAccelerator-InstallerStack|
 |LatestAmiId|You are unlikely to need to change this unless you are developing updates to the script. This value is systems manager key used to look up tyhe latest AMI to be used when deploying the EC2 instance.|/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2|
+|DeleteInstallerStack|If set to true this will remove the original installer stack you deployed to setup the Landing Zone Accelerator on AWS. If set to false the stack will remain, allowing you to re-run the AWSAccelerator-Installer pipeline to redeploy your landing zone configuration|true|
 
 1. Sign in to the AWS Management Console of your organization’s management account and select the button to launch the Landing-zone-acceleartor-on-aws-cleanup AWS CloudFormation template. The template will create a nested cloudformation to setup the VPC. It will then deploy the EC2 instance and undertake the uninstallation. Whilst the uninstallation is running the CloudFormation template will remain in the **CREATE_IN_PROGRESS** stage.
 2. To monitor the progress of the uninstallation open the CloudWatch console, from the left hand menu open the **Log groups** page and search for **landing-zone-accelerator-on-aws-cleanup**. *Note: it might take a few minutes for the log group to appear*
