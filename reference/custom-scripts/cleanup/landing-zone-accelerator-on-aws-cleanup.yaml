@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This template will remove Landing Zone Accelerator on AWS and all it's components from accounts in the organisation.
+
+Parameters:
+  LandingZoneAcceleratorStack:
+    Type: 'String'
+    Default: AWSAccelerator-InstallerStack
+    Description: 'The name of the Landing Zone Accelerator installation stack you used to deploy Landing Zone Acceleartor on AWS'
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  DeleteInstallerStack:
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: 'If set to true (default) this will remove the original installer stack you deployed to setup Landing Zone Accelerator on AWS. If set to false the stack will remain allowing you to re-run the AWSAccelerator-Installer to redeploy your landing zone configuration'
+    Type: 'String'
+
+Resources:
+  vpc:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://aws-quickstart.s3.amazonaws.com/quickstart-aws-vpc/templates/aws-vpc.template.yaml
+      TimeoutInMinutes: '60'
+      Parameters:
+        AvailabilityZones: !Sub ${AWS::Region}a,${AWS::Region}b
+        NumberOfAZs: 2
+
+  CleanupEC2Role: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "ec2.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+
+  CleanupEC2InstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      Path: "/"
+      Roles: 
+        - !Ref CleanupEC2Role
+
+  CleanupEC2:
+    Type: "AWS::EC2::Instance"
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: PT2H
+    Properties:
+      SubnetId: !GetAtt vpc.Outputs.PrivateSubnet1AID
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.large
+      IamInstanceProfile: !Ref CleanupEC2InstanceProfile
+      UserData:
+        Fn::Base64: !Sub 
+          - |
+            #!/bin/bash
+            
+            # Set region
+            yum install -y jq
+            region=$(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
+            export AWS_REGION=$region
+            if [[ "${deleteInstaller}" == "true" ]]; then
+              deleteFlag="--installer-delete"
+            else
+              deleteFlag=""
+            fi
+            
+            # Setup logging
+            logFile='/var/log/landing-zone-accelerator-on-aws-cleanup'
+            yum install -y amazon-cloudwatch-agent
+            echo '{
+                    "agent": {
+                            "run_as_user": "root"
+                    },
+                    "logs": {
+                            "logs_collected": {
+                                    "files": {
+                                            "collect_list": [
+                                                    {
+                                                            "file_path": "/var/log/landing-zone-accelerator-on-aws-cleanup",
+                                                            "log_group_name": "landing-zone-accelerator-on-aws-cleanup",
+                                                            "log_stream_name": "{instance_id}",
+                                                            "retention_in_days": 90
+                                                    }
+                                            ]
+                                    }
+                            }
+                    },
+                    "metrics": {
+                            "metrics_collected": {
+                                    "statsd": {
+                                            "metrics_aggregation_interval": 0,
+                                            "metrics_collection_interval": 10,
+                                            "service_address": ":8125"
+                                    }
+                            }
+                    }
+            }' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+            systemctl start amazon-cloudwatch-agent
+            
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+            . /.nvm/nvm.sh &>>$logFile
+            nvm install --lts &>>$logFile
+            
+            yum install -y git &>>$logFile
+            npm install yarn -g &>>$logFile
+            
+            if ! [ -d "landing-zone-accelerator-on-aws" ]; then
+              git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git &>>$logFile
+            fi
+            
+            cd landing-zone-accelerator-on-aws/source &>>$logFile
+            yarn install &>>$logFile
+            cd packages/@aws-accelerator/tools/ &>>$logFile
+            yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} $deleteFlag --partition aws --delete-data --ignore-termination-protection --delete-pipelines &>>$logFile
+            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource CleanupEC2 --region ${AWS::Region}
+          - stackName: !Ref LandingZoneAcceleratorStack
+            deleteInstaller: !Ref DeleteInstallerStack
+
+Outputs:
+  CleanupLogs:
+    Description: Logs from cleanup activity
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logsV2:log-groups/log-group/landing-zone-accelerator-on-aws-cleanup

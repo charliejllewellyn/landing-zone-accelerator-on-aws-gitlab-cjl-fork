@@ -35,15 +35,17 @@ The script expects two inputs:
 
 ![Completion status example](images/completion.png)
 
+*Note: AWSAccelerator-InstallerStack will be the name you gave to your installation stack when deploying Landing Zone Accelerator on AWS.
+
 5. Once the uninstallation is complete the stack status will change to 
 
 # Troublshooting
 
-If the uninstallation fails you will recieve the following message in the log stream.
+If the uninstallation fails you will recieve a message similar to the following in the log stream.
 
 ![Failure status example](images/failure.png)
 
-You can use the logs to troubleshoot the issue and attempt any manual corrects based on the error messages.
+You can use the logs to troubleshoot the issue and attempt any manual corrections based on the error messages.
 To retry the uninstallation you can delete the cleanup stack and redeploy. It will attempt to pick up from where it failed.
 *Note: to see the logs for the new run you will need to select the newly created log stream in CloudWatch logs.*
 
