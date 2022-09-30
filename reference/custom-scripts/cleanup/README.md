@@ -32,7 +32,7 @@ The script expects two inputs:
 
 ![Log stream uninstallation event example](images/cloudwatch-log-stream.png)
 
-4. When the uninstallation is complete, the last line in the log group will read:
+4. When the uninstallation is complete (which may take over an hour), the last line in the log group will read:
 
 ![Completion status example](images/completion.png)
 
