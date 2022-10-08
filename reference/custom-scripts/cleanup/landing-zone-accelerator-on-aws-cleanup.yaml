@@ -137,7 +137,7 @@ Resources:
             cd landing-zone-accelerator-on-aws/source &>>$logFile
             yarn install &>>$logFile
             cd packages/@aws-accelerator/tools/ &>>$logFile
-            yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} --ignore-termination-protection true --full-destroy true $deleteFlag $deleteRepo --partition aws --delete-data --ignore-termination-protection --delete-pipelines &>>$logFile
+            yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} --ignore-termination-protection true --full-destroy true $deleteFlag $deleteRepo --partition aws --delete-data --ignore-termination-protection --delete-bootstraps true --delete-pipelines &>>$logFile
             /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource CleanupEC2 --region ${AWS::Region}
           - stackName: !Ref LandingZoneAcceleratorStack
             deleteInstaller: !Ref DeleteInstallerStack

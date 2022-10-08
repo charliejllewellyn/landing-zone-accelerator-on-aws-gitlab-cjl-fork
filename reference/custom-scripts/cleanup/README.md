@@ -26,23 +26,23 @@ The script expects two inputs:
 |DeleteInstallerStack|If set to true this will remove the original installer stack you deployed to setup the Landing Zone Accelerator on AWS. If set to false the stack will remain, allowing you to re-run the AWSAccelerator-Installer pipeline to redeploy your landing zone configuration|true|
 |DeleteConfigRepository|If set to true this will remove your Landing Zone Accelerator on AWS configuration repository. If set to false the repository will remain.|true|
 
-1. Sign in to the AWS Management Console of your organization’s management account and select the button to launch the Landing-zone-acceleartor-on-aws-cleanup AWS CloudFormation template. The template will create a nested cloudformation to setup the VPC. It will then deploy the EC2 instance and undertake the uninstallation. Whilst the uninstallation is running the CloudFormation template will remain in the **CREATE_IN_PROGRESS** stage.
+1. Sign in to the AWS Management Console of your organization’s management account and select the button to launch the Landing-zone-accelerator-on-aws-cleanup AWS CloudFormation template. The template will create a nested CloudFormation to setup the VPC. It will then deploy the EC2 instance and undertake the uninstallation. Whilst the uninstallation is running the CloudFormation template will remain in the **CREATE_IN_PROGRESS** stage.
 2. To monitor the progress of the uninstallation open the CloudWatch console, from the left hand menu open the **Log groups** page and search for **landing-zone-accelerator-on-aws-cleanup**. *Note: it might take a few minutes for the log group to appear*
 3. Select the latest instance ID log stream. Here you will see the progress of the uninstallation.
 
 ![Log stream uninstallation event example](images/cloudwatch-log-stream.png)
 
-4. When the uninstallation is complete (which may take over an hour), the last line in the log group will read:
+4. When the uninstallation is complete (which may take over an hour), the stack status will change to **CREATE_COMPLETE** and the last line in the log group will read:
 
 ![Completion status example](images/completion.png)
 
 *Note: AWSAccelerator-InstallerStack will be the name you gave to your installation stack when deploying Landing Zone Accelerator on AWS.
 
-5. Once the uninstallation is complete the stack status will change to 
+5. You can now delete the cleanup up stack from CloudFormation.
 
-# Troublshooting
+# Troubleshooting
 
-If the uninstallation fails you will recieve a message similar to the following in the log stream.
+If the uninstallation fails you will receive a message similar to the following in the log stream.
 
 ![Failure status example](images/failure.png)
 
