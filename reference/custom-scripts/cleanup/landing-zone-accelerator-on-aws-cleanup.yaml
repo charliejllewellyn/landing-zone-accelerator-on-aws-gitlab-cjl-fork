@@ -123,18 +123,25 @@ Resources:
             }' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
             systemctl start amazon-cloudwatch-agent
             
-            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
-            . /.nvm/nvm.sh &>>$logFile
-            nvm install --lts &>>$logFile
-            
             yum install -y git &>>$logFile
-            npm install yarn -g &>>$logFile
             
             if ! [ -d "landing-zone-accelerator-on-aws" ]; then
               git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git &>>$logFile
             fi
-            
+
             cd landing-zone-accelerator-on-aws/source &>>$logFile
+            nodeVersion=$(grep "@types/node" 'source/packages/@aws-accelerator/accelerator/package.json' | awk '{print $2}' | sed 's/"//g' | awk -F. '{print $1}')
+
+            if [ -z $nodeVersion ]; then
+              nodeVersion=16
+            fi
+
+            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+            . /.nvm/nvm.sh &>>$logFile
+            nvm install $nodeVersion &>>$logFile
+
+            npm install yarn -g &>>$logFile
+            
             yarn install &>>$logFile
             cd packages/@aws-accelerator/tools/ &>>$logFile
             yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} --ignore-termination-protection true --full-destroy true $deleteFlag $deleteRepo --partition aws --delete-data --ignore-termination-protection --delete-bootstraps true --delete-pipelines &>>$logFile
