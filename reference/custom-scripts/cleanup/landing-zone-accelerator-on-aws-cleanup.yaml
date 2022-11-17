@@ -62,7 +62,7 @@ Resources:
     Type: "AWS::EC2::Instance"
     CreationPolicy: 
       ResourceSignal:
-        Timeout: PT2H
+        Timeout: PT8H
     Properties:
       SubnetId: !GetAtt vpc.Outputs.PrivateSubnet1AID
       ImageId: !Ref LatestAmiId
