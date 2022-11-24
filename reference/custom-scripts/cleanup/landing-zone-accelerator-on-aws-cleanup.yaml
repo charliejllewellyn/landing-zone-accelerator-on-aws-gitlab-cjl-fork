@@ -23,6 +23,10 @@ Parameters:
     Default: 'true'
     Description: 'If set to true (default) this will remove your Landing Zone Accelerator on AWS configuration repository. If set to false the repository will remain.'
     Type: 'String'
+  RunNumber:
+    Default: 1
+    Description: 'Update this value to force the uninstaller to re-run'
+    Type: 'String'
 
 Resources:
   vpc:
@@ -68,87 +72,161 @@ Resources:
       ImageId: !Ref LatestAmiId
       InstanceType: t3.large
       IamInstanceProfile: !Ref CleanupEC2InstanceProfile
-      UserData:
-        Fn::Base64: !Sub 
-          - |
-            #!/bin/bash
-            
-            # Set region
-            yum install -y jq
-            region=$(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
-            export AWS_REGION=$region
+      UserData: !Base64 
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - |
+              yum install -y aws-cfn-bootstrap
+            - |
+              # Install the files and packages from the metadata
+            - '/opt/aws/bin/cfn-init -v '
+            - '         --stack '
+            - !Ref 'AWS::StackName'
+            - '         --resource CleanupEC2 '
+            - '         --configsets Configuration '
+            - '         --region '
+            - !Ref 'AWS::Region'
+            - |+
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          Configuration:
+            - Install
+            - EnableServices
+            - RunCommands
+        Install:
+          packages:
+            yum:
+              git: []
+              amazon-cloudwatch-agent: []
+              jq: []
+          files:
+            /root/uninstall-lza.sh:
+              content: !Sub 
+                - |
+                  #!/bin/bash
+                  
+                  # Set region
+                  region=$(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
+                  export AWS_REGION=$region
+                  logFile='/var/log/landing-zone-accelerator-on-aws-cleanup'
 
-            if [[ "${deleteInstaller}" == "true" ]]; then
-              deleteFlag="--installer-delete true"
-            else
-              deleteFlag=""
-            fi
+                  echo "################## RUN NUMBER ${updateFlag} ##################" > $logFile
 
-            if [[ "${deleteRepo}" == "true" ]]; then
-              repoFlag="--delete-config-repo true"
-            else
-              repoFlag=""
-            fi
-            
-            # Setup logging
-            logFile='/var/log/landing-zone-accelerator-on-aws-cleanup'
-            yum install -y amazon-cloudwatch-agent
-            echo '{
-                    "agent": {
-                            "run_as_user": "root"
-                    },
-                    "logs": {
-                            "logs_collected": {
-                                    "files": {
-                                            "collect_list": [
-                                                    {
-                                                            "file_path": "/var/log/landing-zone-accelerator-on-aws-cleanup",
-                                                            "log_group_name": "landing-zone-accelerator-on-aws-cleanup",
-                                                            "log_stream_name": "{instance_id}",
-                                                            "retention_in_days": 90
-                                                    }
-                                            ]
-                                    }
-                            }
-                    },
-                    "metrics": {
-                            "metrics_collected": {
-                                    "statsd": {
-                                            "metrics_aggregation_interval": 0,
-                                            "metrics_collection_interval": 10,
-                                            "service_address": ":8125"
-                                    }
-                            }
-                    }
-            }' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-            systemctl start amazon-cloudwatch-agent
-            
-            yum install -y git &>>$logFile
-            
-            if ! [ -d "landing-zone-accelerator-on-aws" ]; then
-              git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git &>>$logFile
-            fi
+                  if [[ "${deleteInstaller}" == "true" ]]; then
+                    deleteFlag="--installer-delete true"
+                  else
+                    deleteFlag=""
+                  fi
 
-            cd landing-zone-accelerator-on-aws/source &>>$logFile
-            nodeVersion=$(grep "@types/node" 'source/packages/@aws-accelerator/accelerator/package.json' | awk '{print $2}' | sed 's/"//g' | awk -F. '{print $1}')
+                  if [[ "${deleteRepo}" == "true" ]]; then
+                    repoFlag="--delete-config-repo true"
+                  else
+                    repoFlag=""
+                  fi
 
-            if [ -z $nodeVersion ]; then
-              nodeVersion=16
-            fi
+                  cd /root
 
-            curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
-            . /.nvm/nvm.sh &>>$logFile
-            nvm install $nodeVersion &>>$logFile
+                  if ! [ -d "landing-zone-accelerator-on-aws" ]; then
+                    git clone https://github.com/awslabs/landing-zone-accelerator-on-aws.git &>>$logFile
+                  fi
 
-            npm install yarn -g &>>$logFile
-            
-            yarn install &>>$logFile
-            cd packages/@aws-accelerator/tools/ &>>$logFile
-            yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} --ignore-termination-protection true --full-destroy true $deleteFlag $deleteRepo --partition aws --delete-data --ignore-termination-protection --delete-bootstraps true --delete-pipelines &>>$logFile
-            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource CleanupEC2 --region ${AWS::Region}
-          - stackName: !Ref LandingZoneAcceleratorStack
-            deleteInstaller: !Ref DeleteInstallerStack
-            deleteRepo: !Ref DeleteConfigRepository
+                  cd landing-zone-accelerator-on-aws/source &>>$logFile
+                  nodeVersion=$(grep "@types/node" 'packages/@aws-accelerator/accelerator/package.json' | awk '{print $2}' | sed 's/"//g' | awk -F. '{print $1}')
+
+                  if [ -z $nodeVersion ]; then
+                    nodeVersion=16
+                  fi
+
+                  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+                  . /.nvm/nvm.sh &>>$logFile
+                  echo '. /.nvm/nvm.sh' >> /root/.bash_profile
+
+                  nvm install $nodeVersion &>>$logFile
+
+                  npm install yarn -g &>>$logFile
+                  
+                  yarn install &>>$logFile
+                  cd packages/@aws-accelerator/tools/ &>>$logFile
+                  yarn run --verbose ts-node --transpile-only uninstaller.ts --installer-stack-name ${stackName} --ignore-termination-protection true --full-destroy true $deleteFlag $deleteRepo --partition aws --delete-data --ignore-termination-protection --delete-bootstraps true --delete-pipelines &>>$logFile
+                  /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource CleanupEC2 --region ${AWS::Region}
+                - stackName: !Ref LandingZoneAcceleratorStack
+                  deleteInstaller: !Ref DeleteInstallerStack
+                  deleteRepo: !Ref DeleteConfigRepository
+                  updateFlag: !Ref RunNumber
+              mode: '000755'
+              owner: root
+              group: root
+            /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json:
+              content: |
+                {
+                        "agent": {
+                                "run_as_user": "root"
+                        },
+                        "logs": {
+                                "logs_collected": {
+                                        "files": {
+                                                "collect_list": [
+                                                        {
+                                                                "file_path": "/var/log/landing-zone-accelerator-on-aws-cleanup",
+                                                                "log_group_name": "landing-zone-accelerator-on-aws-cleanup",
+                                                                "log_stream_name": "{instance_id}",
+                                                                "retention_in_days": 90
+                                                        }
+                                                ]
+                                        }
+                                }
+                        },
+                        "metrics": {
+                                "metrics_collected": {
+                                        "statsd": {
+                                                "metrics_aggregation_interval": 0,
+                                                "metrics_collection_interval": 10,
+                                                "service_address": ":8125"
+                                        }
+                                }
+                        }
+                }
+            /etc/cfn/cfn-hup.conf:
+              content: 
+                !Sub |
+                  [main]
+                  stack=${AWS::StackName}
+                  region=${AWS::Region}
+                  interval=1
+              mode: '000400'
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content:
+                !Sub | 
+                    [cfn-auto-reloader-hook]
+                    triggers=post.update
+                    path=Resources.CleanupEC2.Metadata.AWS::CloudFormation::Init
+                    action=/opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource CleanupEC2 --configsets Configuration --region ${AWS::Region}
+              mode: '000400'
+              owner: root
+              group: root
+        EnableServices:
+          services:
+            systemd:
+              amazon-cloudwatch-agent:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+              cfn-hup:
+                enabled: 'true'
+                ensureRunning: 'true'
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+        RunCommands:
+          commands:
+            uninstallLZA:
+              command: "/root/uninstall-lza.sh"
 
 Outputs:
   CleanupLogs:
